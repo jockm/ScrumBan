@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ScrumBan</title>
+
+    <!-- Toast UI Editor -->
+    <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css"/>
+    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+        :root {
+            --bg:          #f0f2f5;
+            --surface:     #ffffff;
+            --surface2:    #f8f9fb;
+            --border:      #dde1e8;
+            --border-hi:   #b8bfcc;
+            --text:        #374151;
+            --text-dim:    #9ca3af;
+            --text-hi:     #111827;
+            --accent:      #2563eb;
+            --accent-hi:   #1d4ed8;
+            --danger:      #dc2626;
+            --warn-border: #dc2626;
+
+            --pri-critical: #dc2626;
+            --pri-high:     #d97706;
+            --pri-medium:   #2563eb;
+            --pri-low:      #16a34a;
+
+            --col-w:       280px;
+            --radius:      6px;
+            --transition:  0.15s ease;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── Toolbar ────────────────────────────────────────────────────────── */
+        #toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        #app-title {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 0.4em;
+            margin-right: auto;
+        }
+
+        #app-icon {
+            font-size: 1rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        #app-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #toolbar h1 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-hi);
+            letter-spacing: 0.05em;
+            line-height: 1;
+        }
+
+        #app-version {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            color: var(--text-dim);
+            letter-spacing: 0.03em;
+            margin-top: 2px;
+        }
+
+        .btn {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-hi);
+            background: var(--surface2);
+            color: var(--text);
+            cursor: pointer;
+            transition: background var(--transition), color var(--transition), border-color var(--transition);
+            white-space: nowrap;
+        }
+        .btn:hover:not(:disabled) {
+            background: var(--border-hi);
+            color: var(--text-hi);
+        }
+        .btn:disabled {
+            opacity: 0.38;
+            cursor: default;
+        }
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-hi);
+            border-color: var(--accent-hi);
+            color: #fff;
+        }
+        .btn-danger {
+            background: transparent;
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: var(--danger);
+            color: #fff;
+        }
+        #btn-warnings {
+            border-color: var(--border-hi);
+        }
+        #btn-warnings.has-warnings {
+            border-color: var(--warn-border);
+            color: var(--warn-border);
+            animation: pulse-warn 2s infinite;
+        }
+        @keyframes pulse-warn {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(224,79,95,0); }
+            50%       { box-shadow: 0 0 0 4px rgba(224,79,95,0.2); }
+        }
+
+        /* ── Board ───────────────────────────────────────────────────────────── */
+        #board-wrap {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 16px;
+        }
+
+        #board {
+            display: flex;
+            gap: 14px;
+            height: 100%;
+            align-items: flex-start;
+        }
+
+        /* ── Column ──────────────────────────────────────────────────────────── */
+        .column {
+            width: var(--col-w);
+            flex-shrink: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            max-height: 100%;
+        }
+
+        .column-header {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px 8px;
+            border-bottom: 1px solid var(--border);
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .column-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            background: var(--surface2);
+            border-radius: 3px;
+            padding: 1px 5px;
+        }
+
+        .column-name {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-hi);
+            flex: 1;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        .column-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-dim);
+        }
+
+        .btn-rename-col {
+            font-size: 0.7rem;
+            padding: 2px 7px;
+            border-radius: 3px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+        .btn-rename-col:hover {
+            border-color: var(--border-hi);
+            color: var(--text);
+            background: var(--surface2);
+        }
+
+        .column-stories {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            min-height: 60px;
+        }
+
+        .column-stories.drag-over {
+            background: rgba(37, 99, 235, 0.06);
+            border-radius: var(--radius);
+        }
+
+        /* ── Story card ──────────────────────────────────────────────────────── */
+        .card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 9px 11px;
+            cursor: grab;
+            user-select: none;
+            transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+            position: relative;
+        }
+        .card:hover {
+            border-color: var(--border-hi);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+        }
+        .card.dragging {
+            opacity: 0.4;
+            transform: scale(0.97);
+            cursor: grabbing;
+        }
+
+        .card-top {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+        }
+
+        .card-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+
+        .priority-badge {
+            font-size: 0.6rem;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-left: auto;
+        }
+        .pri-critical { background: rgba(224,79,95,0.18); color: var(--pri-critical); border: 1px solid rgba(224,79,95,0.35); }
+        .pri-high     { background: rgba(240,154,62,0.18); color: var(--pri-high);     border: 1px solid rgba(240,154,62,0.35); }
+        .pri-medium   { background: rgba(79,156,240,0.18); color: var(--pri-medium);   border: 1px solid rgba(79,156,240,0.35); }
+        .pri-low      { background: rgba(79,184,122,0.18); color: var(--pri-low);      border: 1px solid rgba(79,184,122,0.35); }
+        .pri-unknown  { background: rgba(107,113,148,0.18); color: var(--text-dim);    border: 1px solid var(--border); }
+
+        .card-summary {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-hi);
+            line-height: 1.35;
+            margin-bottom: 6px;
+        }
+
+        .card-assignee {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+        }
+        .card-assignee span {
+            color: var(--accent-hi);
+        }
+
+        /* ── Modal overlay ───────────────────────────────────────────────────── */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(3px);
+        }
+        .overlay.active { display: flex; }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border-hi);
+            border-radius: 10px;
+            width: min(760px, 96vw);
+            max-height: 92vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            gap: 10px;
+        }
+
+        .modal-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-hi);
+            flex: 1;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.2rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: color var(--transition), background var(--transition);
+        }
+        .modal-close:hover {
+            color: var(--text-hi);
+            background: var(--surface2);
+        }
+
+        .modal-body {
+            padding: 18px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .modal-footer {
+            display: flex;
+            align-items: center;
+            padding: 12px 18px;
+            border-top: 1px solid var(--border);
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .modal-footer .spacer { flex: 1; }
+
+        /* ── Form elements ───────────────────────────────────────────────────── */
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+        }
+
+        .form-group label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-dim);
+        }
+
+        .form-group input,
+        .form-group select {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.82rem;
+            background: var(--surface2);
+            border: 1px solid var(--border-hi);
+            border-radius: var(--radius);
+            color: var(--text-hi);
+            padding: 7px 10px;
+            outline: none;
+            transition: border-color var(--transition);
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: var(--accent);
+        }
+        .form-group input:read-only {
+            opacity: 0.55;
+            cursor: default;
+        }
+        .form-group select option {
+            background: var(--surface2);
+        }
+
+        .editor-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-dim);
+            margin-bottom: 5px;
+        }
+
+        .editor-wrap {
+            border: 1px solid var(--border-hi);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        /* Toast UI Editor — light theme, just remove the border */
+        .toastui-editor-defaultUI {
+            border: none !important;
+        }
+
+        /* ── Simple dialog (warnings, confirm, prompt) ───────────────────────── */
+        .dialog {
+            background: var(--surface);
+            border: 1px solid var(--border-hi);
+            border-radius: 10px;
+            width: min(480px, 96vw);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            padding: 22px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .dialog h3 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-hi);
+        }
+
+        .dialog p {
+            font-size: 0.82rem;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .dialog ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .dialog ul li {
+            font-size: 0.78rem;
+            color: var(--text);
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 7px 10px;
+            line-height: 1.4;
+        }
+
+        .dialog ul li .warn-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .dialog-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .dialog-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .dialog-input-group label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-dim);
+        }
+        .dialog-input-group input {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.82rem;
+            background: var(--surface2);
+            border: 1px solid var(--border-hi);
+            border-radius: var(--radius);
+            color: var(--text-hi);
+            padding: 7px 10px;
+            outline: none;
+            transition: border-color var(--transition);
+            width: 100%;
+        }
+        .dialog-input-group input:focus { border-color: var(--accent); }
+        .dialog-error {
+            font-size: 0.78rem;
+            color: var(--danger);
+            min-height: 1em;
+        }
+
+        /* ── Status bar ──────────────────────────────────────────────────────── */
+        #statusbar {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            padding: 4px 16px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        /* ── Scrollbar style ─────────────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+        /* Collision prompt for refresh */
+        #collision-overlay { z-index: 200; }
+    </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+    <div id="app-title"><span id="app-icon">📋</span><div id="app-text"><h1>ScrumBan</h1><span id="app-version">v0.1.0</span></div></div>
+    <button class="btn btn-primary" id="btn-new-story">+ New Story</button>
+    <button class="btn" id="btn-new-col">+ Column</button>
+    <button class="btn" id="btn-refresh">↺ Refresh</button>
+    <button class="btn" id="btn-warnings" disabled>Warnings</button>
+</div>
+
+<!-- Board -->
+<div id="board-wrap">
+    <div id="board"></div>
+</div>
+
+<!-- Status bar -->
+<div id="statusbar"><span id="status-msg">Ready.</span></div>
+
+<!-- ── Story form modal ─────────────────────────────────────────────────── -->
+<div class="overlay" id="story-overlay">
+    <div class="modal" id="story-modal">
+        <div class="modal-header">
+            <span class="modal-title" id="story-modal-title">New Story</span>
+            <button class="modal-close" id="story-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-row">
+                <div class="form-group" style="max-width:200px">
+                    <label>ID (filename)</label>
+                    <input type="text" id="field-id" placeholder="e.g. fix-login-bug"/>
+                </div>
+                <div class="form-group">
+                    <label>Summary</label>
+                    <input type="text" id="field-summary" placeholder="One-line summary"/>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Assignee</label>
+                    <input type="text" id="field-assignee" placeholder="username"/>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <input type="text" id="field-status" placeholder="e.g. In Progress"/>
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <input type="text" id="field-priority" placeholder="High / Medium / Low"/>
+                </div>
+            </div>
+
+            <div>
+                <div class="editor-label">Description</div>
+                <div class="editor-wrap" id="editor-description-wrap">
+                    <div id="editor-description"></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="editor-label">Comments</div>
+                <div class="editor-wrap" id="editor-comments-wrap">
+                    <div id="editor-comments"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger" id="btn-delete-story" style="display:none">Delete Story</button>
+            <div class="spacer"></div>
+            <div class="dialog-error" id="story-form-error"></div>
+            <button class="btn" id="btn-story-cancel">Cancel</button>
+            <button class="btn btn-primary" id="btn-story-save">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Warnings dialog ─────────────────────────────────────────────────── -->
+<div class="overlay" id="warnings-overlay">
+    <div class="dialog">
+        <h3>⚠ Warnings</h3>
+        <ul id="warnings-list"></ul>
+        <div class="dialog-actions">
+            <button class="btn btn-primary" id="btn-warnings-close">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── New column dialog ───────────────────────────────────────────────── -->
+<div class="overlay" id="newcol-overlay">
+    <div class="dialog">
+        <h3 id="newcol-title">New Column</h3>
+        <div class="dialog-input-group">
+            <label>Number (00–99)</label>
+            <input type="number" id="newcol-number" min="0" max="99" placeholder="e.g. 04"/>
+        </div>
+        <div class="dialog-input-group">
+            <label>Name</label>
+            <input type="text" id="newcol-name" placeholder="e.g. In Review"/>
+        </div>
+        <div class="dialog-error" id="newcol-error"></div>
+        <div class="dialog-actions">
+            <button class="btn" id="btn-newcol-cancel">Cancel</button>
+            <button class="btn btn-primary" id="btn-newcol-save">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Rename column dialog ────────────────────────────────────────────── -->
+<div class="overlay" id="renamecol-overlay">
+    <div class="dialog">
+        <h3>Rename Column</h3>
+        <div class="dialog-input-group">
+            <label>Number (00–99)</label>
+            <input type="number" id="renamecol-number" min="0" max="99"/>
+        </div>
+        <div class="dialog-input-group">
+            <label>Name</label>
+            <input type="text" id="renamecol-name"/>
+        </div>
+        <div class="dialog-error" id="renamecol-error"></div>
+        <div class="dialog-actions">
+            <button class="btn" id="btn-renamecol-cancel">Cancel</button>
+            <button class="btn btn-primary" id="btn-renamecol-save">Rename</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Confirm dialog ─────────────────────────────────────────────────── -->
+<div class="overlay" id="confirm-overlay">
+    <div class="dialog">
+        <h3 id="confirm-title">Confirm</h3>
+        <p id="confirm-message"></p>
+        <div class="dialog-actions">
+            <button class="btn" id="btn-confirm-no">Cancel</button>
+            <button class="btn btn-danger" id="btn-confirm-yes">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Collision dialog (refresh conflict) ────────────────────────────── -->
+<div class="overlay" id="collision-overlay">
+    <div class="dialog">
+        <h3>Story Changed on Disk</h3>
+        <p id="collision-message"></p>
+        <div class="dialog-actions">
+            <button class="btn" id="btn-collision-keep">Keep My Edits</button>
+            <button class="btn btn-primary" id="btn-collision-use-disk">Use Disk Version</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ═══════════════════════════════════════════════════════════════════════════
+    // State
+    // ═══════════════════════════════════════════════════════════════════════════
+    let boardData = { Columns: [], Warnings: [] };
+    let editorDesc = null;
+    let editorComments = null;
+    // Track the story currently open in the form so we can detect changes on refresh.
+    let openStory = null; // { story, isNew }
+    let dragState = null; // { storyId, fromColumnDir }
+    let renameTarget = null; // { dirName }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Utilities
+    // ═══════════════════════════════════════════════════════════════════════════
+    const $ = id => document.getElementById(id);
+    const status = msg => { $('status-msg').textContent = msg; };
+
+    function priorityClass(p) {
+        switch ((p || '').toLowerCase()) {
+            case 'critical': return 'pri-critical';
+            case 'high':     return 'pri-high';
+            case 'medium':   return 'pri-medium';
+            case 'low':      return 'pri-low';
+            default:         return 'pri-unknown';
+        }
+    }
+
+    async function apiFetch(url, opts) {
+        const res = await fetch(url, opts);
+        const ct = res.headers.get('content-type') || '';
+        const body = ct.includes('application/json') ? await res.json() : await res.text();
+        return { ok: res.ok, status: res.status, body };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Overlays
+    // ═══════════════════════════════════════════════════════════════════════════
+    function showOverlay(id) { $(id).classList.add('active'); }
+    function hideOverlay(id) { $(id).classList.remove('active'); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Confirm dialog
+    // ═══════════════════════════════════════════════════════════════════════════
+    function showConfirm(title, message) {
+        return new Promise(resolve => {
+            $('confirm-title').textContent = title;
+            $('confirm-message').textContent = message;
+            showOverlay('confirm-overlay');
+            const yes = $('btn-confirm-yes');
+            const no = $('btn-confirm-no');
+            function cleanup(val) {
+                hideOverlay('confirm-overlay');
+                yes.removeEventListener('click', onYes);
+                no.removeEventListener('click', onNo);
+                resolve(val);
+            }
+            function onYes() { cleanup(true); }
+            function onNo()  { cleanup(false); }
+            yes.addEventListener('click', onYes);
+            no.addEventListener('click', onNo);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Board rendering
+    // ═══════════════════════════════════════════════════════════════════════════
+    function renderBoard(data) {
+        boardData = data;
+        const board = $('board');
+        board.innerHTML = '';
+
+        for (const col of data.Columns) {
+            board.appendChild(buildColumn(col));
+        }
+
+        updateWarningsButton(data.Warnings);
+        status(`Last refreshed: ${new Date().toLocaleTimeString()} — ${data.Columns.length} column(s)`);
+    }
+
+    function buildColumn(col) {
+        const el = document.createElement('div');
+        el.className = 'column';
+        el.dataset.dirName = col.DirName;
+
+        const stories = col.Stories || [];
+
+        el.innerHTML = `
+    <div class="column-header">
+      <span class="column-number">${String(col.Number).padStart(2,'0')}</span>
+      <span class="column-name">${escHtml(col.Name)}</span>
+      <span class="column-count">${stories.length}</span>
+      <button class="btn-rename-col" data-dirname="${escHtml(col.DirName)}"
+              data-number="${col.Number}" data-name="${escHtml(col.Name)}" title="Rename column">✎</button>
+    </div>
+    <div class="column-stories" data-coldir="${escHtml(col.DirName)}"></div>
+  `;
+
+        el.querySelector('.btn-rename-col').addEventListener('click', e => {
+            openRenameColumn(e.currentTarget.dataset.dirname,
+                parseInt(e.currentTarget.dataset.number),
+                e.currentTarget.dataset.name);
+        });
+
+        const storiesEl = el.querySelector('.column-stories');
+        for (const story of stories) {
+            storiesEl.appendChild(buildCard(story));
+        }
+
+        // Drop target events
+        storiesEl.addEventListener('dragover', e => {
+            e.preventDefault();
+            storiesEl.classList.add('drag-over');
+        });
+        storiesEl.addEventListener('dragleave', () => {
+            storiesEl.classList.remove('drag-over');
+        });
+        storiesEl.addEventListener('drop', e => {
+            e.preventDefault();
+            storiesEl.classList.remove('drag-over');
+            if (!dragState) return;
+            const toColumnDir = storiesEl.dataset.coldir;
+            if (dragState.fromColumnDir === toColumnDir) return;
+            moveStory(dragState.storyId, dragState.fromColumnDir, toColumnDir);
+        });
+
+        return el;
+    }
+
+    function buildCard(story) {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.draggable = true;
+        el.dataset.storyId = story.ID;
+        el.dataset.columnDir = story.ColumnDir;
+
+        el.innerHTML = `
+    <div class="card-top">
+      <span class="card-id">${escHtml(story.ID)}</span>
+      <span class="priority-badge ${priorityClass(story.Priority)}">${escHtml(story.Priority)}</span>
+    </div>
+    <div class="card-summary">${escHtml(story.Summary || '(no summary)')}</div>
+    <div class="card-assignee">↳ <span>${escHtml(story.Assignee)}</span></div>
+  `;
+
+        el.addEventListener('dragstart', () => {
+            dragState = { storyId: story.ID, fromColumnDir: story.ColumnDir };
+            el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            dragState = null;
+        });
+        el.addEventListener('dblclick', () => openEditStory(story));
+
+        return el;
+    }
+
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function updateWarningsButton(warnings) {
+        const btn = $('btn-warnings');
+        if (!warnings || warnings.length === 0) {
+            btn.disabled = true;
+            btn.classList.remove('has-warnings');
+            btn.textContent = 'Warnings';
+        } else {
+            btn.disabled = false;
+            btn.classList.add('has-warnings');
+            btn.textContent = `Warnings (${warnings.length})`;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Fetch & refresh
+    // ═══════════════════════════════════════════════════════════════════════════
+    async function loadBoard() {
+        status('Scanning…');
+        try {
+            const r = await apiFetch('/api/board');
+            if (!r.ok) { status('Error loading board: ' + (r.body.error || r.status)); return; }
+            renderBoard(r.body);
+            // If a story form is open, check for changes.
+            if (openStory) {
+                await checkOpenStoryConflict();
+            }
+        } catch(e) {
+            status('Network error: ' + e.message);
+        }
+    }
+
+    // Partial board refresh: update column data without destroying DOM unless needed.
+    // For simplicity and correctness we re-render; the DOM is lightweight.
+    async function refresh() {
+        await loadBoard();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Collision detection
+    // ═══════════════════════════════════════════════════════════════════════════
+    async function checkOpenStoryConflict() {
+        if (!openStory || openStory.isNew) return;
+
+        const { story } = openStory;
+        // Find what column it's now in.
+        const r = await apiFetch(`/api/story/get?id=${encodeURIComponent(story.ID)}&columnDir=${encodeURIComponent(story.ColumnDir)}`);
+
+        if (r.status === 404) {
+            // Story was deleted on disk.
+            await showCollisionDeleted(story.ID);
+            return;
+        }
+
+        if (!r.ok) return; // can't determine, leave form open
+
+        const diskStory = r.body;
+
+        // Compare key fields to see if anything changed.
+        const changed = diskStory.Assignee !== story.Assignee ||
+            diskStory.Status   !== story.Status   ||
+            diskStory.Priority !== story.Priority  ||
+            diskStory.Summary  !== story.Summary   ||
+            diskStory.Description !== story.Description ||
+            diskStory.Comments !== story.Comments;
+
+        if (!changed) return;
+
+        const choice = await showCollisionDialog(story.ID);
+        if (choice === 'disk') {
+            populateStoryForm(diskStory, false);
+            openStory = { story: diskStory, isNew: false };
+        }
+        // else keep current form edits
+    }
+
+    function showCollisionDeleted(storyId) {
+        return new Promise(resolve => {
+            $('collision-message').textContent =
+                `"${storyId}" was deleted from disk. The form will now close.`;
+            $('btn-collision-keep').style.display = 'none';
+            $('btn-collision-use-disk').textContent = 'OK';
+            showOverlay('collision-overlay');
+            function done() {
+                hideOverlay('collision-overlay');
+                $('btn-collision-keep').style.display = '';
+                $('btn-collision-use-disk').textContent = 'Use Disk Version';
+                $('btn-collision-use-disk').removeEventListener('click', done);
+                closeStoryForm();
+                resolve();
+            }
+            $('btn-collision-use-disk').addEventListener('click', done);
+        });
+    }
+
+    function showCollisionDialog(storyId) {
+        return new Promise(resolve => {
+            $('collision-message').textContent =
+                `"${storyId}" has been modified on disk since you opened it. Which version do you want to use?`;
+            showOverlay('collision-overlay');
+            const keep = $('btn-collision-keep');
+            const disk = $('btn-collision-use-disk');
+            function onKeep() { cleanup('keep'); }
+            function onDisk() { cleanup('disk'); }
+            function cleanup(choice) {
+                hideOverlay('collision-overlay');
+                keep.removeEventListener('click', onKeep);
+                disk.removeEventListener('click', onDisk);
+                resolve(choice);
+            }
+            keep.addEventListener('click', onKeep);
+            disk.addEventListener('click', onDisk);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Toast UI Editors – initialised once, reused
+    // ═══════════════════════════════════════════════════════════════════════════
+    function initEditors() {
+        // Shared hook that demotes any H1 lines to H2 in the markdown source.
+        // Runs on every change so it catches both typed input and toolbar insertions.
+        // The programmatic flag prevents the setMarkdown call from re-triggering itself.
+        function demoteH1(editor) {
+            let programmatic = false;
+            editor.on('change', () => {
+                if (programmatic) return;
+                const md = editor.getMarkdown();
+                // Match lines that are exactly "# text" (H1) but not "## text" (H2+).
+                if (/(?:^|\n)# (?!#)/.test(md)) {
+                    const fixed = md.replace(/(^|\n)# (?!#)/g, '$1## ');
+                    programmatic = true;
+                    editor.setMarkdown(fixed);
+                    programmatic = false;
+                }
+            });
+        }
+
+        editorDesc = new toastui.Editor({
+            el: $('editor-description'),
+            height: '200px',
+            initialEditType: 'wysiwyg',
+            previewStyle: 'tab',
+            hideModeSwitch: false,
+            toolbarItems: [
+                ['bold', 'italic', 'strike'],
+                ['heading', 'hr', 'quote'],
+                ['ul', 'ol'],
+                ['code', 'codeblock'],
+            ],
+        });
+        demoteH1(editorDesc);
+
+        editorComments = new toastui.Editor({
+            el: $('editor-comments'),
+            height: '160px',
+            initialEditType: 'wysiwyg',
+            previewStyle: 'tab',
+            hideModeSwitch: false,
+            toolbarItems: [
+                ['bold', 'italic', 'strike'],
+                ['heading', 'hr', 'quote'],
+                ['ul', 'ol'],
+            ],
+        });
+        demoteH1(editorComments);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Story form
+    // ═══════════════════════════════════════════════════════════════════════════
+    function openNewStory() {
+        $('story-modal-title').textContent = 'New Story';
+        $('field-id').readOnly = false;
+        $('btn-delete-story').style.display = 'none';
+        $('story-form-error').textContent = '';
+
+        $('field-id').value = '';
+        $('field-summary').value = '';
+        $('field-assignee').value = '';
+        $('field-status').value = '';
+        $('field-priority').value = '';
+        editorDesc.setMarkdown('');
+        editorComments.setMarkdown('');
+
+        openStory = { story: null, isNew: true };
+        showOverlay('story-overlay');
+        $('field-id').focus();
+    }
+
+    function openEditStory(story) {
+        $('story-modal-title').textContent = 'Edit Story';
+        $('field-id').readOnly = true;
+        $('btn-delete-story').style.display = '';
+        $('story-form-error').textContent = '';
+
+        populateStoryForm(story, false);
+        openStory = { story: { ...story }, isNew: false };
+        showOverlay('story-overlay');
+    }
+
+    function populateStoryForm(story, idEditable) {
+        $('field-id').value      = story.ID || '';
+        $('field-summary').value = story.Summary || '';
+        $('field-assignee').value = story.Assignee || '';
+        $('field-status').value  = story.Status || '';
+        $('field-priority').value = story.Priority || '';
+        editorDesc.setMarkdown(story.Description || '');
+        editorComments.setMarkdown(story.Comments || '');
+        if (idEditable !== undefined) $('field-id').readOnly = !idEditable;
+    }
+
+    function closeStoryForm() {
+        hideOverlay('story-overlay');
+        openStory = null;
+    }
+
+    async function saveStory() {
+        $('story-form-error').textContent = '';
+
+        const id       = $('field-id').value.trim();
+        const summary  = $('field-summary').value.trim();
+        const assignee = $('field-assignee').value.trim() || 'UNKNOWN';
+        const stStatus = $('field-status').value.trim()   || 'UNKNOWN';
+        const priority = $('field-priority').value.trim() || 'UNKNOWN';
+        const description = editorDesc.getMarkdown();
+        const comments    = editorComments.getMarkdown();
+
+        if (!id) { $('story-form-error').textContent = 'ID is required.'; return; }
+        if (!summary) { $('story-form-error').textContent = 'Summary is required.'; return; }
+
+        // Validate id: no path separators or dots
+        if (/[/\\.]/.test(id)) {
+            $('story-form-error').textContent = 'ID must not contain / \\ or .';
+            return;
+        }
+
+        // Determine which column to write to.
+        let columnDir;
+        if (openStory.isNew) {
+            // First column
+            if (boardData.Columns.length === 0) {
+                $('story-form-error').textContent = 'No columns exist. Create a column first.';
+                return;
+            }
+            columnDir = boardData.Columns[0].DirName;
+        } else {
+            columnDir = openStory.story.ColumnDir;
+        }
+
+        // Carry CommentHeading forward from the original story so round-trips preserve it.
+        const commentHeading = (openStory && !openStory.isNew && openStory.story.CommentHeading)
+            ? openStory.story.CommentHeading : "";
+        const story = { ID: id, ColumnDir: columnDir, Assignee: assignee,
+            Status: stStatus, Priority: priority,
+            Summary: summary, Description: description,
+            CommentHeading: commentHeading, Comments: comments };
+
+        const method = openStory.isNew ? 'POST' : 'PUT';
+        const r = await apiFetch('/api/story', {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(story),
+        });
+
+        if (!r.ok) {
+            $('story-form-error').textContent = r.body.error || 'Save failed.';
+            return;
+        }
+
+        closeStoryForm();
+        await loadBoard();
+    }
+
+    async function deleteStory() {
+        if (!openStory || openStory.isNew) return;
+        const story = openStory.story;
+        const confirmed = await showConfirm('Delete Story',
+            `Are you sure you want to permanently delete "${story.ID}"? This cannot be undone.`);
+        if (!confirmed) return;
+
+        const r = await apiFetch('/api/story/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storyId: story.ID, columnDir: story.ColumnDir }),
+        });
+
+        if (!r.ok) {
+            $('story-form-error').textContent = r.body.error || 'Delete failed.';
+            return;
+        }
+
+        closeStoryForm();
+        await loadBoard();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Drag & drop — move story
+    // ═══════════════════════════════════════════════════════════════════════════
+    async function moveStory(storyId, fromColumnDir, toColumnDir) {
+        const r = await apiFetch('/api/story/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storyId, fromColumnDir, toColumnDir }),
+        });
+        if (!r.ok) {
+            alert('Failed to move story: ' + (r.body.error || r.status));
+            return;
+        }
+        // Update the card's columnDir if it's currently open for editing.
+        if (openStory && !openStory.isNew && openStory.story.ID === storyId) {
+            openStory.story.ColumnDir = toColumnDir;
+        }
+        await loadBoard();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Columns
+    // ═══════════════════════════════════════════════════════════════════════════
+    function openNewColumnDialog() {
+        $('newcol-title').textContent = 'New Column';
+        $('newcol-number').value = '';
+        $('newcol-name').value = '';
+        $('newcol-error').textContent = '';
+        $('btn-newcol-save').textContent = 'Create';
+        showOverlay('newcol-overlay');
+        $('newcol-number').focus();
+    }
+
+    async function saveNewColumn() {
+        $('newcol-error').textContent = '';
+        const numStr = $('newcol-number').value.trim();
+        const name   = $('newcol-name').value.trim();
+
+        if (numStr === '') { $('newcol-error').textContent = 'Number is required.'; return; }
+        const num = parseInt(numStr, 10);
+        if (isNaN(num) || num < 0 || num > 99) { $('newcol-error').textContent = 'Number must be 0–99.'; return; }
+        if (!name) { $('newcol-error').textContent = 'Name is required.'; return; }
+        if (!/^[A-Za-z0-9 _-]+$/.test(name)) {
+            $('newcol-error').textContent = 'Name may only contain letters, digits, spaces, hyphens, underscores.';
+            return;
+        }
+
+        const r = await apiFetch('/api/column/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: num, name }),
+        });
+        if (!r.ok) { $('newcol-error').textContent = r.body.error || 'Create failed.'; return; }
+        hideOverlay('newcol-overlay');
+        await loadBoard();
+    }
+
+    function openRenameColumn(dirName, number, name) {
+        renameTarget = { dirName };
+        $('renamecol-number').value = number;
+        $('renamecol-name').value = name;
+        $('renamecol-error').textContent = '';
+        showOverlay('renamecol-overlay');
+        $('renamecol-name').focus();
+    }
+
+    async function saveRenameColumn() {
+        $('renamecol-error').textContent = '';
+        if (!renameTarget) return;
+
+        const numStr = $('renamecol-number').value.trim();
+        const name   = $('renamecol-name').value.trim();
+
+        if (numStr === '') { $('renamecol-error').textContent = 'Number is required.'; return; }
+        const num = parseInt(numStr, 10);
+        if (isNaN(num) || num < 0 || num > 99) { $('renamecol-error').textContent = 'Number must be 0–99.'; return; }
+        if (!name) { $('renamecol-error').textContent = 'Name is required.'; return; }
+        if (!/^[A-Za-z0-9 _-]+$/.test(name)) {
+            $('renamecol-error').textContent = 'Name may only contain letters, digits, spaces, hyphens, underscores.';
+            return;
+        }
+
+        const r = await apiFetch('/api/column/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldDirName: renameTarget.dirName, newNumber: num, newName: name }),
+        });
+        if (!r.ok) { $('renamecol-error').textContent = r.body.error || 'Rename failed.'; return; }
+        hideOverlay('renamecol-overlay');
+        renameTarget = null;
+        await loadBoard();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Warnings
+    // ═══════════════════════════════════════════════════════════════════════════
+    function showWarnings() {
+        const list = $('warnings-list');
+        list.innerHTML = '';
+        for (const w of (boardData.Warnings || [])) {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="warn-path">${escHtml(w.Path)}</span>${escHtml(w.Message)}`;
+            list.appendChild(li);
+        }
+        showOverlay('warnings-overlay');
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Auto-refresh (every 5 minutes)
+    // ═══════════════════════════════════════════════════════════════════════════
+    setInterval(refresh, 5 * 60 * 1000);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Event wiring
+    // ═══════════════════════════════════════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', () => {
+        initEditors();
+        loadBoard();
+
+        $('btn-new-story').addEventListener('click', openNewStory);
+        $('btn-new-col').addEventListener('click', openNewColumnDialog);
+        $('btn-refresh').addEventListener('click', refresh);
+        $('btn-warnings').addEventListener('click', showWarnings);
+        $('btn-warnings-close').addEventListener('click', () => hideOverlay('warnings-overlay'));
+
+        $('story-modal-close').addEventListener('click', closeStoryForm);
+        $('btn-story-cancel').addEventListener('click', closeStoryForm);
+        $('btn-story-save').addEventListener('click', saveStory);
+        $('btn-delete-story').addEventListener('click', deleteStory);
+
+        $('btn-newcol-cancel').addEventListener('click', () => hideOverlay('newcol-overlay'));
+        $('btn-newcol-save').addEventListener('click', saveNewColumn);
+
+        $('btn-renamecol-cancel').addEventListener('click', () => {
+            hideOverlay('renamecol-overlay');
+            renameTarget = null;
+        });
+        $('btn-renamecol-save').addEventListener('click', saveRenameColumn);
+
+        // Close overlays on backdrop click (except collision — user must choose)
+        for (const id of ['warnings-overlay', 'newcol-overlay', 'renamecol-overlay', 'confirm-overlay']) {
+            $(id).addEventListener('click', e => {
+                if (e.target === $(id)) hideOverlay(id);
+            });
+        }
+        $('story-overlay').addEventListener('click', e => {
+            if (e.target === $('story-overlay')) closeStoryForm();
+        });
+
+        // Enter key in column dialogs
+        $('newcol-name').addEventListener('keydown', e => { if (e.key === 'Enter') saveNewColumn(); });
+        $('renamecol-name').addEventListener('keydown', e => { if (e.key === 'Enter') saveRenameColumn(); });
+    });
+</script>
+</body>
+</html>
