@@ -17,7 +17,6 @@ var columnDirRe = regexp.MustCompile(`^(\d{2})\.(.+)$`)
 // frontMatter is what we unmarshal from YAML.
 type frontMatter struct {
 	Assignee string `yaml:"assignee"`
-	Status   string `yaml:"status"`
 	Priority string `yaml:"priority"`
 }
 
@@ -29,8 +28,7 @@ func Scan(dataDir string) (*Board, error) {
 	}
 
 	var warnings []Warning
-	// Track which column numbers we have seen to detect duplicates.
-	seenNumbers := map[int]string{} // number -> DirName of first seen
+	seenNumbers := map[int]string{}
 	var columns []*Column
 
 	for _, e := range entries {
@@ -39,7 +37,7 @@ func Scan(dataDir string) (*Board, error) {
 		}
 		m := columnDirRe.FindStringSubmatch(e.Name())
 		if m == nil {
-			continue // not a ##.Name folder, ignore
+			continue
 		}
 		num, _ := strconv.Atoi(m[1])
 		colName := m[2]
@@ -60,7 +58,6 @@ func Scan(dataDir string) (*Board, error) {
 			DirName: dirName,
 		}
 
-		// Scan .md files inside this column directory.
 		colPath := filepath.Join(dataDir, dirName)
 		mdEntries, err := os.ReadDir(colPath)
 		if err != nil {
@@ -89,7 +86,6 @@ func Scan(dataDir string) (*Board, error) {
 		columns = append(columns, col)
 	}
 
-	// Sort columns by number.
 	sort.Slice(columns, func(i, j int) bool {
 		return columns[i].Number < columns[j].Number
 	})
@@ -100,8 +96,7 @@ func Scan(dataDir string) (*Board, error) {
 	}, nil
 }
 
-// parseStory parses a single .md file. Returns a warning and nil story if the
-// file cannot be used.
+// parseStory parses a single .md file.
 func parseStory(path, columnDir, filename string) (*Story, *Warning) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -110,21 +105,17 @@ func parseStory(path, columnDir, filename string) (*Story, *Warning) {
 
 	content := string(data)
 
-	// Front matter must be the very first thing in the file.
 	if !strings.HasPrefix(content, "---\n") {
 		return nil, &Warning{Path: path, Message: "no YAML front matter found (file must start with ---)"}
 	}
 
-	// Skip the opening ---\n (4 bytes) then find the closing ---.
 	rest := content[4:]
 	var yamlSrc, body string
 
 	if idx := strings.Index(rest, "\n---\n"); idx != -1 {
-		// Closing --- in the middle of the file.
 		yamlSrc = rest[:idx]
-		body = rest[idx+5:] // skip past \n---\n
+		body = rest[idx+5:]
 	} else {
-		// Check for closing --- at end of file (possibly with trailing newline).
 		trimmed := strings.TrimRight(rest, "\r\n ")
 		if strings.HasSuffix(trimmed, "\n---") {
 			yamlSrc = trimmed[:len(trimmed)-4]
@@ -142,9 +133,6 @@ func parseStory(path, columnDir, filename string) (*Story, *Warning) {
 	if fm.Assignee == "" {
 		fm.Assignee = "UNKNOWN"
 	}
-	if fm.Status == "" {
-		fm.Status = "UNKNOWN"
-	}
 	if fm.Priority == "" {
 		fm.Priority = "UNKNOWN"
 	}
@@ -158,7 +146,6 @@ func parseStory(path, columnDir, filename string) (*Story, *Warning) {
 		ID:             id,
 		ColumnDir:      columnDir,
 		Assignee:       fm.Assignee,
-		Status:         fm.Status,
 		Priority:       fm.Priority,
 		Summary:        summary,
 		Description:    description,
@@ -169,8 +156,6 @@ func parseStory(path, columnDir, filename string) (*Story, *Warning) {
 
 // parseBody splits the markdown body into summary, description, comment heading,
 // and comments.
-// First H1 = summary. Text until next H1 = description. Second H1 text =
-// commentHeading. Text after the second H1 = comments.
 func parseBody(body string) (summary, description, commentHeading, comments string) {
 	lines := strings.Split(body, "\n")
 
@@ -189,7 +174,6 @@ func parseBody(body string) (summary, description, commentHeading, comments stri
 	}
 
 	if firstH1 == -1 {
-		// No H1 at all — everything is description.
 		description = strings.TrimSpace(body)
 		return
 	}
@@ -197,7 +181,6 @@ func parseBody(body string) (summary, description, commentHeading, comments stri
 	summary = strings.TrimPrefix(lines[firstH1], "# ")
 
 	if secondH1 == -1 {
-		// No second H1 — everything after first H1 is description.
 		descLines := lines[firstH1+1:]
 		description = strings.TrimSpace(strings.Join(descLines, "\n"))
 		return
@@ -258,7 +241,6 @@ func RenameColumn(dataDir, oldDirName string, newNumber int, newName string) err
 }
 
 // ReadStoryFromDisk reads and parses a single story file.
-// Used for conflict detection during refresh.
 func ReadStoryFromDisk(dataDir, columnDir, storyID string) (*Story, *Warning) {
 	filename := storyID + ".md"
 	path := filepath.Join(dataDir, columnDir, filename)
@@ -275,18 +257,13 @@ func StoryExists(dataDir, columnDir, storyID string) bool {
 func buildMarkdown(s *Story) string {
 	var sb strings.Builder
 
-	// Marshal front matter via the yaml library so special characters in
-	// free-form values are quoted correctly.
 	fm := frontMatter{
 		Assignee: s.Assignee,
-		Status:   s.Status,
 		Priority: s.Priority,
 	}
 	fmBytes, err := yaml.Marshal(fm)
 	if err != nil {
-		// Fallback: write raw (should never happen with simple string values).
-		fmBytes = []byte(fmt.Sprintf("assignee: %s\nstatus: %s\npriority: %s\n",
-			s.Assignee, s.Status, s.Priority))
+		fmBytes = []byte(fmt.Sprintf("assignee: %s\npriority: %s\n", s.Assignee, s.Priority))
 	}
 	sb.WriteString("---\n")
 	sb.Write(fmBytes)
@@ -298,8 +275,6 @@ func buildMarkdown(s *Story) string {
 		sb.WriteString("\n")
 	}
 
-	// Preserve whatever the user called their comment section heading,
-	// defaulting to "Commentary" for new stories.
 	heading := s.CommentHeading
 	if heading == "" {
 		heading = "Commentary"

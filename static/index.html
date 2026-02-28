@@ -442,9 +442,45 @@
             overflow: hidden;
         }
 
-        /* Toast UI Editor — light theme, just remove the border */
+        /* Toast UI Editor — light theme, remove the border */
         .toastui-editor-defaultUI {
             border: none !important;
+        }
+
+        /* ── Read-only comments viewer ───────────────────────────────────────── */
+        .comments-readonly {
+            border: 1px solid var(--border-hi);
+            border-radius: var(--radius);
+            background: var(--surface2);
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            color: var(--text);
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .comments-readonly.empty {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+        /* Basic markdown rendering styles inside the readonly view */
+        .comments-readonly p  { margin: 0 0 0.5em; }
+        .comments-readonly p:last-child { margin-bottom: 0; }
+        .comments-readonly ul, .comments-readonly ol { margin: 0 0 0.5em 1.4em; }
+        .comments-readonly li { margin-bottom: 0.2em; }
+        .comments-readonly strong { font-weight: 600; }
+        .comments-readonly em { font-style: italic; }
+        .comments-readonly code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8em;
+            background: var(--border);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        .comments-readonly hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 0.6em 0;
         }
 
         /* ── Simple dialog (warnings, confirm, prompt) ───────────────────────── */
@@ -563,7 +599,7 @@
 <!-- Toolbar -->
 <div id="toolbar">
     <div id="app-title"><span id="app-icon">📋</span><div id="app-text"><h1>ScrumBan</h1><span id="app-version">v0.1.0</span></div></div>
-    <button class="btn btn-primary" id="btn-new-story">+ New Story</button>
+    <button class="btn btn-primary" id="btn-new-story" disabled>+ New Story</button>
     <button class="btn" id="btn-new-col">+ Column</button>
     <button class="btn" id="btn-refresh">↺ Refresh</button>
     <button class="btn" id="btn-warnings" disabled>Warnings</button>
@@ -601,10 +637,6 @@
                     <input type="text" id="field-assignee" placeholder="username"/>
                 </div>
                 <div class="form-group">
-                    <label>Status</label>
-                    <input type="text" id="field-status" placeholder="e.g. In Progress"/>
-                </div>
-                <div class="form-group">
                     <label>Priority</label>
                     <input type="text" id="field-priority" placeholder="High / Medium / Low"/>
                 </div>
@@ -618,9 +650,14 @@
             </div>
 
             <div>
-                <div class="editor-label">Comments</div>
-                <div class="editor-wrap" id="editor-comments-wrap">
-                    <div id="editor-comments"></div>
+                <div class="editor-label">Existing Comments</div>
+                <div class="comments-readonly empty" id="comments-readonly">No comments yet.</div>
+            </div>
+
+            <div>
+                <div class="editor-label">Add Comment</div>
+                <div class="editor-wrap" id="editor-new-comment-wrap">
+                    <div id="editor-new-comment"></div>
                 </div>
             </div>
         </div>
@@ -715,7 +752,7 @@
     // ═══════════════════════════════════════════════════════════════════════════
     let boardData = { Columns: [], Warnings: [] };
     let editorDesc = null;
-    let editorComments = null;
+    let editorNewComment = null;
     // Track the story currently open in the form so we can detect changes on refresh.
     let openStory = null; // { story, isNew }
     let dragState = null; // { storyId, fromColumnDir }
@@ -742,6 +779,83 @@
         const ct = res.headers.get('content-type') || '';
         const body = ct.includes('application/json') ? await res.json() : await res.text();
         return { ok: res.ok, status: res.status, body };
+    }
+
+    // Returns a timestamp string like "2026-02-27 14:35 EST" in the user's local timezone.
+    function localTimestamp() {
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const date = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+        const time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        // Extract the abbreviated timezone name from the locale string.
+        // e.g. "2/27/2026, 2:35:00 PM Pacific Standard Time" — we want the last word(s).
+        // Intl.DateTimeFormat gives us a short timezone abbreviation reliably.
+        let tz = '';
+        try {
+            tz = ' ' + new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
+                .formatToParts(now)
+                .find(p => p.type === 'timeZoneName').value;
+        } catch(_) {}
+        return `${date} ${time}${tz}`;
+    }
+
+    // Minimal markdown-to-HTML renderer for the read-only comments view.
+    // Handles: bold, italic, inline code, horizontal rules, unordered lists,
+    // ordered lists, and paragraphs. Full fidelity is not required — the
+    // Toast editor is the canonical source of truth; this is display only.
+    function renderMarkdown(md) {
+        if (!md || !md.trim()) return '';
+        const lines = md.split('\n');
+        const out = [];
+        let inUl = false, inOl = false;
+
+        function closeList() {
+            if (inUl) { out.push('</ul>'); inUl = false; }
+            if (inOl) { out.push('</ol>'); inOl = false; }
+        }
+
+        function inlineEsc(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/__(.+?)__/g, '<strong>$1</strong>')
+                .replace(/_(.+?)_/g, '<em>$1</em>');
+        }
+
+        for (const raw of lines) {
+            const line = raw;
+            if (/^---+$/.test(line.trim())) {
+                closeList();
+                out.push('<hr>');
+                continue;
+            }
+            const ulMatch = line.match(/^[*\-] (.+)/);
+            if (ulMatch) {
+                if (inOl) { out.push('</ol>'); inOl = false; }
+                if (!inUl) { out.push('<ul>'); inUl = true; }
+                out.push(`<li>${inlineEsc(ulMatch[1])}</li>`);
+                continue;
+            }
+            const olMatch = line.match(/^\d+\. (.+)/);
+            if (olMatch) {
+                if (inUl) { out.push('</ul>'); inUl = false; }
+                if (!inOl) { out.push('<ol>'); inOl = true; }
+                out.push(`<li>${inlineEsc(olMatch[1])}</li>`);
+                continue;
+            }
+            closeList();
+            if (line.trim() === '') {
+                // blank line — paragraph break handled by CSS margin
+                continue;
+            }
+            out.push(`<p>${inlineEsc(line)}</p>`);
+        }
+        closeList();
+        return out.join('');
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -786,7 +900,12 @@
         }
 
         updateWarningsButton(data.Warnings);
+        updateNewStoryButton(data.Columns);
         status(`Last refreshed: ${new Date().toLocaleTimeString()} — ${data.Columns.length} column(s)`);
+    }
+
+    function updateNewStoryButton(columns) {
+        $('btn-new-story').disabled = !columns || columns.length === 0;
     }
 
     function buildColumn(col) {
@@ -818,7 +937,6 @@
             storiesEl.appendChild(buildCard(story));
         }
 
-        // Drop target events
         storiesEl.addEventListener('dragover', e => {
             e.preventDefault();
             storiesEl.classList.add('drag-over');
@@ -893,7 +1011,6 @@
             const r = await apiFetch('/api/board');
             if (!r.ok) { status('Error loading board: ' + (r.body.error || r.status)); return; }
             renderBoard(r.body);
-            // If a story form is open, check for changes.
             if (openStory) {
                 await checkOpenStoryConflict();
             }
@@ -902,8 +1019,6 @@
         }
     }
 
-    // Partial board refresh: update column data without destroying DOM unless needed.
-    // For simplicity and correctness we re-render; the DOM is lightweight.
     async function refresh() {
         await loadBoard();
     }
@@ -915,26 +1030,22 @@
         if (!openStory || openStory.isNew) return;
 
         const { story } = openStory;
-        // Find what column it's now in.
         const r = await apiFetch(`/api/story/get?id=${encodeURIComponent(story.ID)}&columnDir=${encodeURIComponent(story.ColumnDir)}`);
 
         if (r.status === 404) {
-            // Story was deleted on disk.
             await showCollisionDeleted(story.ID);
             return;
         }
 
-        if (!r.ok) return; // can't determine, leave form open
+        if (!r.ok) return;
 
         const diskStory = r.body;
 
-        // Compare key fields to see if anything changed.
-        const changed = diskStory.Assignee !== story.Assignee ||
-            diskStory.Status   !== story.Status   ||
-            diskStory.Priority !== story.Priority  ||
-            diskStory.Summary  !== story.Summary   ||
-            diskStory.Description !== story.Description ||
-            diskStory.Comments !== story.Comments;
+        const changed = diskStory.Assignee     !== story.Assignee     ||
+            diskStory.Priority     !== story.Priority      ||
+            diskStory.Summary      !== story.Summary       ||
+            diskStory.Description  !== story.Description   ||
+            diskStory.Comments     !== story.Comments;
 
         if (!changed) return;
 
@@ -943,7 +1054,6 @@
             populateStoryForm(diskStory, false);
             openStory = { story: diskStory, isNew: false };
         }
-        // else keep current form edits
     }
 
     function showCollisionDeleted(storyId) {
@@ -989,15 +1099,11 @@
     // Toast UI Editors – initialised once, reused
     // ═══════════════════════════════════════════════════════════════════════════
     function initEditors() {
-        // Shared hook that demotes any H1 lines to H2 in the markdown source.
-        // Runs on every change so it catches both typed input and toolbar insertions.
-        // The programmatic flag prevents the setMarkdown call from re-triggering itself.
         function demoteH1(editor) {
             let programmatic = false;
             editor.on('change', () => {
                 if (programmatic) return;
                 const md = editor.getMarkdown();
-                // Match lines that are exactly "# text" (H1) but not "## text" (H2+).
                 if (/(?:^|\n)# (?!#)/.test(md)) {
                     const fixed = md.replace(/(^|\n)# (?!#)/g, '$1## ');
                     programmatic = true;
@@ -1022,9 +1128,9 @@
         });
         demoteH1(editorDesc);
 
-        editorComments = new toastui.Editor({
-            el: $('editor-comments'),
-            height: '160px',
+        editorNewComment = new toastui.Editor({
+            el: $('editor-new-comment'),
+            height: '140px',
             initialEditType: 'wysiwyg',
             previewStyle: 'tab',
             hideModeSwitch: false,
@@ -1034,7 +1140,7 @@
                 ['ul', 'ol'],
             ],
         });
-        demoteH1(editorComments);
+        demoteH1(editorNewComment);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1049,10 +1155,10 @@
         $('field-id').value = '';
         $('field-summary').value = '';
         $('field-assignee').value = '';
-        $('field-status').value = '';
         $('field-priority').value = '';
         editorDesc.setMarkdown('');
-        editorComments.setMarkdown('');
+        editorNewComment.setMarkdown('');
+        setReadonlyComments('');
 
         openStory = { story: null, isNew: true };
         showOverlay('story-overlay');
@@ -1070,14 +1176,28 @@
         showOverlay('story-overlay');
     }
 
+    // Renders existing comments into the read-only view.
+    function setReadonlyComments(markdown) {
+        const el = $('comments-readonly');
+        const html = renderMarkdown(markdown);
+        if (html) {
+            el.innerHTML = html;
+            el.classList.remove('empty');
+        } else {
+            el.innerHTML = 'No comments yet.';
+            el.classList.add('empty');
+        }
+    }
+
     function populateStoryForm(story, idEditable) {
-        $('field-id').value      = story.ID || '';
-        $('field-summary').value = story.Summary || '';
+        $('field-id').value       = story.ID || '';
+        $('field-summary').value  = story.Summary || '';
         $('field-assignee').value = story.Assignee || '';
-        $('field-status').value  = story.Status || '';
         $('field-priority').value = story.Priority || '';
         editorDesc.setMarkdown(story.Description || '');
-        editorComments.setMarkdown(story.Comments || '');
+        // Existing comments go to read-only view; new comment editor is always blank.
+        setReadonlyComments(story.Comments || '');
+        editorNewComment.setMarkdown('');
         if (idEditable !== undefined) $('field-id').readOnly = !idEditable;
     }
 
@@ -1089,27 +1209,35 @@
     async function saveStory() {
         $('story-form-error').textContent = '';
 
-        const id       = $('field-id').value.trim();
-        const summary  = $('field-summary').value.trim();
-        const assignee = $('field-assignee').value.trim() || 'UNKNOWN';
-        const stStatus = $('field-status').value.trim()   || 'UNKNOWN';
-        const priority = $('field-priority').value.trim() || 'UNKNOWN';
+        const id          = $('field-id').value.trim();
+        const summary     = $('field-summary').value.trim();
+        const assignee    = $('field-assignee').value.trim() || 'UNKNOWN';
+        const priority    = $('field-priority').value.trim() || 'UNKNOWN';
         const description = editorDesc.getMarkdown();
-        const comments    = editorComments.getMarkdown();
 
         if (!id) { $('story-form-error').textContent = 'ID is required.'; return; }
         if (!summary) { $('story-form-error').textContent = 'Summary is required.'; return; }
 
-        // Validate id: no path separators or dots
         if (/[/\\.]/.test(id)) {
             $('story-form-error').textContent = 'ID must not contain / \\ or .';
             return;
         }
 
-        // Determine which column to write to.
+        // Build final comments: existing + new (with timestamp prepended) if any.
+        const existingComments = (openStory && !openStory.isNew && openStory.story)
+            ? (openStory.story.Comments || '')
+            : '';
+        const newCommentRaw = editorNewComment.getMarkdown().trim();
+        let comments = existingComments;
+        if (newCommentRaw) {
+            const stamped = `**${localTimestamp()}:** ${newCommentRaw}`;
+            comments = existingComments
+                ? existingComments + '\n\n' + stamped
+                : stamped;
+        }
+
         let columnDir;
         if (openStory.isNew) {
-            // First column
             if (boardData.Columns.length === 0) {
                 $('story-form-error').textContent = 'No columns exist. Create a column first.';
                 return;
@@ -1119,13 +1247,13 @@
             columnDir = openStory.story.ColumnDir;
         }
 
-        // Carry CommentHeading forward from the original story so round-trips preserve it.
         const commentHeading = (openStory && !openStory.isNew && openStory.story.CommentHeading)
-            ? openStory.story.CommentHeading : "";
-        const story = { ID: id, ColumnDir: columnDir, Assignee: assignee,
-            Status: stStatus, Priority: priority,
-            Summary: summary, Description: description,
-            CommentHeading: commentHeading, Comments: comments };
+            ? openStory.story.CommentHeading : '';
+        const story = {
+            ID: id, ColumnDir: columnDir, Assignee: assignee,
+            Priority: priority, Summary: summary, Description: description,
+            CommentHeading: commentHeading, Comments: comments
+        };
 
         const method = openStory.isNew ? 'POST' : 'PUT';
         const r = await apiFetch('/api/story', {
@@ -1178,7 +1306,6 @@
             alert('Failed to move story: ' + (r.body.error || r.status));
             return;
         }
-        // Update the card's columnDir if it's currently open for editing.
         if (openStory && !openStory.isNew && openStory.story.ID === storyId) {
             openStory.story.ColumnDir = toColumnDir;
         }
@@ -1304,7 +1431,6 @@
         });
         $('btn-renamecol-save').addEventListener('click', saveRenameColumn);
 
-        // Close overlays on backdrop click (except collision — user must choose)
         for (const id of ['warnings-overlay', 'newcol-overlay', 'renamecol-overlay', 'confirm-overlay']) {
             $(id).addEventListener('click', e => {
                 if (e.target === $(id)) hideOverlay(id);
@@ -1314,7 +1440,6 @@
             if (e.target === $('story-overlay')) closeStoryForm();
         });
 
-        // Enter key in column dialogs
         $('newcol-name').addEventListener('keydown', e => { if (e.key === 'Enter') saveNewColumn(); });
         $('renamecol-name').addEventListener('keydown', e => { if (e.key === 'Enter') saveRenameColumn(); });
     });

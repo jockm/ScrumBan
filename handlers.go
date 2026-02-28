@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
 )
 
 // Server holds shared state for HTTP handlers.
@@ -67,9 +66,6 @@ func (s *Server) handleStory(w http.ResponseWriter, r *http.Request) {
 	// Sanitise defaults.
 	if story.Assignee == "" {
 		story.Assignee = "UNKNOWN"
-	}
-	if story.Status == "" {
-		story.Status = "UNKNOWN"
 	}
 	if story.Priority == "" {
 		story.Priority = "UNKNOWN"
@@ -140,7 +136,6 @@ func (s *Server) handleDeleteStory(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetStory reads a single story from disk and returns it.
-// Used by the frontend to check for out-of-band changes.
 func (s *Server) handleGetStory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -153,9 +148,7 @@ func (s *Server) handleGetStory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if it even exists.
 	if !StoryExists(s.DataDir, columnDir, storyID) {
-		// Return a 404-style JSON so the client can handle deletion.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
@@ -195,7 +188,6 @@ func (s *Server) handleCreateColumn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for duplicate number in existing columns.
 	if dup, err := columnNumberExists(s.DataDir, req.Number); err != nil {
 		jsonError(w, "could not check existing columns: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -241,7 +233,6 @@ func (s *Server) handleRenameColumn(w http.ResponseWriter, r *http.Request) {
 
 	newDirName := fmt.Sprintf("%02d.%s", req.NewNumber, req.NewName)
 	if newDirName != req.OldDirName {
-		// Check the new number isn't taken by a different column.
 		if dup, err := columnNumberExists(s.DataDir, req.NewNumber); err != nil {
 			jsonError(w, "could not check existing columns: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -251,7 +242,6 @@ func (s *Server) handleRenameColumn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Verify old dir exists.
 	if _, err := os.Stat(filepath.Join(s.DataDir, req.OldDirName)); os.IsNotExist(err) {
 		jsonError(w, "column not found on disk", http.StatusNotFound)
 		return
@@ -264,8 +254,7 @@ func (s *Server) handleRenameColumn(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"status": "ok", "dirName": newDirName})
 }
 
-// handleListColumnNumbers returns the list of currently used column numbers,
-// so the frontend can prevent duplicates when creating/renaming.
+// handleListColumnNumbers returns the list of currently used column numbers.
 func (s *Server) handleListColumnNumbers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -292,8 +281,7 @@ func (s *Server) handleListColumnNumbers(w http.ResponseWriter, r *http.Request)
 	jsonOK(w, map[string]interface{}{"numbers": nums})
 }
 
-// columnNumberExists returns the dirName of any existing column with the given
-// number, or "" if none.
+// columnNumberExists returns the dirName of any existing column with the given number, or "".
 func columnNumberExists(dataDir string, number int) (string, error) {
 	entries, err := os.ReadDir(dataDir)
 	if err != nil {
